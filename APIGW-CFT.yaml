@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "YAML CloudFormation for API-Gateway"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+       Label:
+           default: 'API Gateway'
+       Parameters:
+           - ApiGatewayName
+           - ApiGatewayDescription
+           - RootResourceName
+           - MainResourceName
+           - MethodType
+           - MethodURL
+           - StageName
+
+Parameters:
+  ApiGatewayName:
+    Type: "String"
+    Default: "sample-rest-api"
+    Description: "Provide API Gateway Name"
+
+  ApiGatewayDescription:
+    Type: "String"
+    Default: "CloudFormation for API-gateway"
+    Description: "Provide API Gateway Description"
+
+  RootResourceName:
+    Type: "String"
+    Default: "api"
+    Description: "Provide API Gateway Root Resource Name"
+
+  MainResourceName:
+    Type: "String"
+    Default: "getAPIDetail"
+    Description: "Provide API Gateway Main Resource Name"
+
+  MethodType:
+    Type: "String"
+    AllowedValues: ["GET","POST","PUT","ANY","DELETE","HEAD","PATCH","OPTIONS"]
+    Description: "Provide Method Type"
+
+  MethodURL:
+    Type: "String"
+    Default: "http://www.sample.com"
+    Description: "Provide EndPoint URL of your service"
+
+  StageName:
+    Type: "String"
+    Default: "UAT"
+    Description: "Provide API Gateway Stage Name"
+
+Resources:
+  RestAPI:
+    Properties:
+      Description: !Ref ApiGatewayDescription
+      Name: !Ref ApiGatewayName
+    Type: 'AWS::ApiGateway::RestApi'
+
+  RootResource:
+    Properties:
+      ParentId: !GetAtt 
+        - RestAPI
+        - RootResourceId
+      PathPart: !Ref "RootResourceName"
+      RestApiId: !Ref RestAPI
+    Type: 'AWS::ApiGateway::Resource'
+
+  MainResource:
+    Properties:
+      ParentId: !Ref RootResource
+      PathPart: !Ref MainResourceName
+      RestApiId: !Ref RestAPI
+    Type: 'AWS::ApiGateway::Resource'
+  
+  Method:
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: !Ref MethodType
+      Integration:
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            ResponseTemplates:
+              application/json: ''
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestParameters:
+          integration.request.header.Authorization: method.request.header.auth
+          integration.request.header.Businesscorelationid: method.request.header.Businesscorelationid
+          integration.request.header.Corelationid: method.request.header.Corelationid
+        Type: HTTP
+        Uri: !Ref MethodURL
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: '200'
+      RequestParameters:
+        method.request.header.Businesscorelationid: true
+        method.request.header.Corelationid: true
+        method.request.header.auth: true
+        method.request.header.x-api-key: true
+      ResourceId: !Ref MainResource
+      RestApiId: !Ref RestAPI
+    Type: 'AWS::ApiGateway::Method'
+
+    
+  OptionMethod:
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+              method.response.header.Access-Control-Allow-Methods: '''GET,OPTIONS'''
+              method.response.header.Access-Control-Allow-Origin: '''*'''
+            ResponseTemplates:
+              application/json: ''
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        Type: MOCK
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: '200'
+      ResourceId: !Ref MainResource
+      RestApiId: !Ref RestAPI
+    Type: 'AWS::ApiGateway::Method'
+
+  v1Deployment:
+    DependsOn: OptionMethod
+    Properties:
+      RestApiId: !Ref RestAPI
+    Type: 'AWS::ApiGateway::Deployment'
+
+  v1Stage:
+    Properties:
+      DeploymentId: !Ref v1Deployment
+      RestApiId: !Ref RestAPI
+      StageName: !Ref StageName 
+    Type: 'AWS::ApiGateway::Stage'
+
+Outputs:
+  ApiEndpoint:
+    Description: Endpoint for this stage of the api
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !Ref RestAPI
+        - .execute-api.eu-west-1.amazonaws.com/
+        - !Ref StageName
